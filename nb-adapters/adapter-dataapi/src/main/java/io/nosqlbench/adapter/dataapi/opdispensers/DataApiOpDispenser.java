@@ -40,6 +40,7 @@ import io.nosqlbench.adapters.api.templating.ParsedOp;
 import java.util.*;
 import java.util.function.LongFunction;
 import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
 public abstract class DataApiOpDispenser extends BaseOpDispenser<DataApiBaseOp, DataApiSpace> {
@@ -162,16 +163,22 @@ public abstract class DataApiOpDispenser extends BaseOpDispenser<DataApiBaseOp, 
         return docMapList.stream().map((docMap) -> getDocumentFromRawMap(docMap)).toList();
     }
 
+    /// Retrieve a document template for batched array of documents and, given the batch size,
+    /// returns a function (of `l`) yielding directly the unrolled list of documents.
     @SuppressWarnings("unchecked")
-    protected LongFunction<Document> getDocumentTemplateFunctionFromOp(ParsedOp op, Integer batchSize) {
+    protected LongFunction<List<Document>> getTemplatedDocumentsFunctionFromOp(ParsedOp op, Integer batchSize) {
         // this is assumed to be a function returning map of <String, Object> i.e. raw material for a Document:
         Optional<LongFunction<Map>> dtMapFunc = op.getAsOptionalFunction("document_template", Map.class);
         if (!dtMapFunc.isPresent()) {
             throw new OpConfigError("Required field 'document_template' not supplied.");
         }
         return (l) -> {
+            Long lBase = l * batchSize;
             LongFunction<Map> mapper = dtMapFunc.get();
-            return getDocumentFromRawMap(mapper.apply(l));
+            List<Document> documents = LongStream.range(0, batchSize)
+                .mapToObj(inIndex -> getDocumentFromRawMap(mapper.apply(lBase + inIndex)))
+                .collect(Collectors.toList());
+            return documents;
         };
     }
 

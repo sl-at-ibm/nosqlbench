@@ -49,12 +49,9 @@ public class DataApiCollectionInsertManyOpDispenser extends DataApiOpDispenser {
             ensureOpKeysAbsent(op, new String[]{"documents"});
             ensureOpKeysPresent(op, new String[]{"batch_size", "document_template"});
             Integer batchSize = getBatchSizeFromOp(op, true, null);
-            LongFunction<Document> docTemplateFunc = getDocumentTemplateFunctionFromOp(op, batchSize);
+            LongFunction<List<Document>> docsFunc = getTemplatedDocumentsFunctionFromOp(op, batchSize);
             return (l) -> {
-                Long lBase = l * batchSize;
-                List<Document> documents = LongStream.range(0, batchSize)
-                    .mapToObj(inIndex -> docTemplateFunc.apply(lBase + inIndex))
-                    .collect(Collectors.toList());
+                List<Document> documents = docsFunc.apply(l);
                 return new DataApiCollectionInsertManyOp(
                     spaceFunction.apply(l).getDatabase(),
                     targetFunction.apply(l),
