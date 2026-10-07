@@ -22,14 +22,17 @@ import io.nosqlbench.adapter.dataapi.DataApiDriverAdapter;
 import io.nosqlbench.adapter.dataapi.ops.DataApiBaseOp;
 import io.nosqlbench.adapter.dataapi.ops.DataApiCollectionInsertManyOp;
 import io.nosqlbench.adapters.api.templating.ParsedOp;
+import io.nosqlbench.nb.api.errors.OpConfigError;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.LongFunction;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 
 public class DataApiCollectionInsertManyOpDispenser extends DataApiOpDispenser {
     private static final Logger logger = LogManager.getLogger(DataApiCollectionInsertManyOpDispenser.class);
@@ -41,6 +44,37 @@ public class DataApiCollectionInsertManyOpDispenser extends DataApiOpDispenser {
     }
 
     private LongFunction<DataApiCollectionInsertManyOp> createOpFunction(ParsedOp op) {
+        Boolean batched = getBatchedFromOp(op, false, false);
+        if (batched) {
+            ensureOpKeysAbsent(op, new String[]{"documents"});
+            ensureOpKeysPresent(op, new String[]{"batch_size", "document_template"});
+            // THE FOLLOWING TO BE REMADE (entirely) INTO OP DISP
+            // this is assumed to be a function returning map of <String, Object> i.e. raw material for a Document:
+            Optional<LongFunction<Map>> dtMapFunc = op.getAsOptionalFunction("document_template", Map.class);
+            if (!dtMapFunc.isPresent()) {
+                throw new OpConfigError("Required field 'document_template' not supplied.");
+            }
+            LongFunction<Map> docTemplateFunc = dtMapFunc.get();
+            Integer batchSize = getBatchSizeFromOp(op, true, null);
+            // END OF TO-MOVE
+            return (l) -> {
+                Long lBase = l * batchSize;
+                @SuppressWarnings("unchecked")
+                List<Document> documents = LongStream.range(0, batchSize)
+                    .mapToObj(inIndex -> getDocumentFromRawMap(docTemplateFunc.apply(lBase + inIndex)))
+                    .collect(Collectors.toList());
+                return new DataApiCollectionInsertManyOp(
+                    spaceFunction.apply(l).getDatabase(),
+                    targetFunction.apply(l),
+                    documents,
+                    getCollectionInsertManyOptions(op, l)
+                );
+            };
+
+            // cook it all together as a function "l->insertmanyop"
+        }
+        // regular explicit-document-list behaviour
+        ensureOpKeysAbsent(op, new String[]{"batch_size", "document_template"});
         return (l) -> {
             List<Document> documents = getDocumentsFromOp(op, l);
             return new DataApiCollectionInsertManyOp(

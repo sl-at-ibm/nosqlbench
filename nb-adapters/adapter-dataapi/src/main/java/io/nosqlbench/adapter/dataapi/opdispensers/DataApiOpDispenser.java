@@ -53,6 +53,28 @@ public abstract class DataApiOpDispenser extends BaseOpDispenser<DataApiBaseOp, 
         this.spaceFunction = adapter.getSpaceFunc(op);
     }
 
+    protected void ensureOpKeysPresent(ParsedOp op, String[] fieldNames) {
+        List<String> missing = Stream.of(fieldNames).filter(f -> !op.isDefined(f)).collect(Collectors.toList());
+        if (!missing.isEmpty()) {
+            String fieldWord = missing.size() == 1 ? "field" : "fields";
+            throw new OpConfigError(
+                "Required " + fieldWord + " " +
+                String.join(", ", missing) + " not found in op"
+            );
+        }
+    }
+
+    protected void ensureOpKeysAbsent(ParsedOp op, String[] fieldNames) {
+        List<String> present = Stream.of(fieldNames).filter(op::isDefined).collect(Collectors.toList());
+        if (!present.isEmpty()) {
+            String fieldWord = present.size() == 1 ? "field" : "fields";
+            throw new OpConfigError(
+                "Op has " + fieldWord + " it should not have: "
+                + String.join(", ", present) + "."
+            );
+        }
+    }
+
     protected Sort[] getSortFromOp(ParsedOp op, long l) {
         List<Sort> sorts = null;
 
@@ -233,6 +255,32 @@ public abstract class DataApiOpDispenser extends BaseOpDispenser<DataApiBaseOp, 
             return of.apply(l);
         }
         return null;
+    }
+
+    protected Boolean getBatchedFromOp(ParsedOp op, Boolean required, Boolean defaultValue) {
+        Optional<Boolean> batched = op.getOptionalStaticValue("batched", Boolean.class);
+        if (batched.isPresent()) {
+            return batched.get();
+        }
+        if (required) {
+            throw new OpConfigError(
+                "Required field 'batched' not supplied."
+            );
+        }
+        return defaultValue;
+    }
+
+    protected Integer getBatchSizeFromOp(ParsedOp op, Boolean required, Integer defaultValue) {
+        Optional<Integer> batchSize = op.getOptionalStaticValue("batch_size", Integer.class);
+        if (batchSize.isPresent()) {
+            return batchSize.get();
+        }
+        if (required) {
+            throw new OpConfigError(
+                "Required field 'batch_size' not supplied."
+            );
+        }
+        return defaultValue;
     }
 
     protected ReturnDocument getReturnDocumentFromOp(ParsedOp op, long l) {
