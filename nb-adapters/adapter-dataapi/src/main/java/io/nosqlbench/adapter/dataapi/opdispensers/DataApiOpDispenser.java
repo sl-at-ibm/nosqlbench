@@ -162,6 +162,19 @@ public abstract class DataApiOpDispenser extends BaseOpDispenser<DataApiBaseOp, 
         return docMapList.stream().map((docMap) -> getDocumentFromRawMap(docMap)).toList();
     }
 
+    @SuppressWarnings("unchecked")
+    protected LongFunction<Document> getDocumentTemplateFunctionFromOp(ParsedOp op, Integer batchSize) {
+        // this is assumed to be a function returning map of <String, Object> i.e. raw material for a Document:
+        Optional<LongFunction<Map>> dtMapFunc = op.getAsOptionalFunction("document_template", Map.class);
+        if (!dtMapFunc.isPresent()) {
+            throw new OpConfigError("Required field 'document_template' not supplied.");
+        }
+        return (l) -> {
+            LongFunction<Map> mapper = dtMapFunc.get();
+            return getDocumentFromRawMap(mapper.apply(l));
+        };
+    }
+
     protected Update getUpdateFromOp(ParsedOp op, long l) {
         Map<String, Object> updateMap = getFreeFormFromOp(op, l, "update", true);
         return new Update(updateMap);

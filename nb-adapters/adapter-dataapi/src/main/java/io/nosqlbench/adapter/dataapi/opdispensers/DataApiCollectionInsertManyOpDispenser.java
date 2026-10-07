@@ -48,20 +48,12 @@ public class DataApiCollectionInsertManyOpDispenser extends DataApiOpDispenser {
         if (batched) {
             ensureOpKeysAbsent(op, new String[]{"documents"});
             ensureOpKeysPresent(op, new String[]{"batch_size", "document_template"});
-            // THE FOLLOWING TO BE REMADE (entirely) INTO OP DISP
-            // this is assumed to be a function returning map of <String, Object> i.e. raw material for a Document:
-            Optional<LongFunction<Map>> dtMapFunc = op.getAsOptionalFunction("document_template", Map.class);
-            if (!dtMapFunc.isPresent()) {
-                throw new OpConfigError("Required field 'document_template' not supplied.");
-            }
-            LongFunction<Map> docTemplateFunc = dtMapFunc.get();
             Integer batchSize = getBatchSizeFromOp(op, true, null);
-            // END OF TO-MOVE
+            LongFunction<Document> docTemplateFunc = getDocumentTemplateFunctionFromOp(op, batchSize);
             return (l) -> {
                 Long lBase = l * batchSize;
-                @SuppressWarnings("unchecked")
                 List<Document> documents = LongStream.range(0, batchSize)
-                    .mapToObj(inIndex -> getDocumentFromRawMap(docTemplateFunc.apply(lBase + inIndex)))
+                    .mapToObj(inIndex -> docTemplateFunc.apply(lBase + inIndex))
                     .collect(Collectors.toList());
                 return new DataApiCollectionInsertManyOp(
                     spaceFunction.apply(l).getDatabase(),
@@ -70,8 +62,6 @@ public class DataApiCollectionInsertManyOpDispenser extends DataApiOpDispenser {
                     getCollectionInsertManyOptions(op, l)
                 );
             };
-
-            // cook it all together as a function "l->insertmanyop"
         }
         // regular explicit-document-list behaviour
         ensureOpKeysAbsent(op, new String[]{"batch_size", "document_template"});
